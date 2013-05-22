@@ -16,7 +16,7 @@ jinja2_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir), au
 
 class Handler(webapp2.RequestHandler):
 
-  def write(self,*a, **kw):
+	def write(self,*a, **kw):
 		self.response.out.write(*a, **kw)
 
 	def render_str(self, template, **params):
@@ -31,15 +31,8 @@ class Task(ndb.Model):
 	word = ndb.StringProperty(required=True)
 	count = ndb.IntegerProperty()
 
-class MainPage(Handler):
-
-	def get(self):
-		self.render('main.html')
+class Counter():
 	
-	def post(self):
-		word = self.request.get('word')
-		self.decide(word)
-		
 	def projection(self, word):
 		ids = Task.query().fetch(projection=['word'])
 		return ids
@@ -47,7 +40,6 @@ class MainPage(Handler):
 	def process_fetch(self,word):
 		ids = self.projection(word)
 		for i in ids:
-			#logging.error('%s'%i.word)
 			if i.word == word:
 				return False
 
@@ -55,29 +47,8 @@ class MainPage(Handler):
 		if not self.process_fetch(word):
 			task = Task(id=word, word=word)
 			task.put()
-		global id
-		id = word
-		taskqueue.add(url='/result',params={'id': word})
-		self.redirect('/result')
-
-
-
-class Result(Handler):
-
-	def get(self):
-		search = Task.get_by_id(id)
-		if search.count == None:
-			self.response.out.write('ZADANIE W TOKU, PROSZĘ ODSWIEZYĆ')
-		else:
-			self.response.out.write('SLOWO WYSTEPUJE {0} RAZY.'.format(search.count))
-
-	def post(self):
-		tag = self.request.get('id')
-		search = Task.get_by_id(tag)
-		SUM = self.count_word(search)
-		search.count = SUM
-		search.put()
-
+		taskqueue.add(url='/result/{0}'.format(word)) 
+		self.redirect('/result/{0}'.format(word))
 
 	def count_word(self,search):
 		url = ['http://onet.pl/','http://interia.pl/','http://wp.pl/','http://redtube.com/','http://www.gazeta.pl/0,0.html',
@@ -89,7 +60,7 @@ class Result(Handler):
 			shots += self.count(text,search.word)
 		return shots
 	
-	def count(self,text,word):
+	def count(self,text,word):
 		shots = 0
 		for line in text:
 			shots += len(re.findall('(?<![a-zA-Z0-9]){0}'.format(word),line))
@@ -107,11 +78,37 @@ class Result(Handler):
 					check=False
 					pure_text.append(line)
 		return pure_text
-		
-class List(Handler):
+
+class MainPage(Handler,Counter):
+
+	def get(self):
+		self.render('main.html')
+	
+	def post(self):
+		word = self.request.get('word')
+		self.decide(word)
+
+
+class Result(Handler,Counter):
+
+	def get(self,id):
+		search = Task.get_by_id(id)
+		if search.count == None:
+			self.response.out.write('ZADANIE W TOKU, PROSZĘ ODSWIEZYĆ')
+		else:
+			self.response.out.write('SLOWO WYSTEPUJE {0} RAZY.'.format(search.count))
+
+	def post(self,id):
+		search = Task.get_by_id(id)
+		SUM = self.count_word(search)
+		search.count = SUM
+		search.put()
+
+
+class List(Handler,Counter):
 	
 	def get(self):
 		return
 
 
-app = webapp2.WSGIApplication([('/search',MainPage),('/result',Result),('/list',List)], debug=True)
+app = webapp2.WSGIApplication([('/search',MainPage),('/result/([a-zA-Z0-9_]+)',Result),('/list',List)], debug=True)

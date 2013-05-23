@@ -7,6 +7,7 @@ import string
 import logging
 import urllib2
 
+from google.appengine.api import urlfetch
 from google.appengine.api import taskqueue
 from google.appengine.ext import ndb
 
@@ -47,17 +48,27 @@ class Counter():
 		if not self.process_fetch(word):
 			task = Task(id=word, word=word)
 			task.put()
-		taskqueue.add(url='/result/{0}'.format(word)) 
+		taskqueue.add(url='/result/{0}'.format(word)) #,params={'id': word} to wczesniej dzialalo a teraz nie dziala
 		self.redirect('/result/{0}'.format(word))
+		
 
 	def count_word(self,search):
 		url = ['http://onet.pl/','http://interia.pl/','http://wp.pl/','http://redtube.com/','http://www.gazeta.pl/0,0.html',
 		'http://www.pudelek.pl/','http://www.kozaczek.pl/','http://www.plotek.pl/plotek/0,0.html','http://www.thetimes.co.uk/tto/news/','http://edition.cnn.com/']
+		rpcs = []
 		shots = 0
 		for u in url:
-			result = urllib2.urlopen(u)
-			text = self.prepare_text(result)
-			shots += self.count(text,search.word)
+			rpc = urlfetch.create_rpc()
+			urlfetch.make_fetch_call(rpc, u)
+			try:
+				res = rpc.get_result()
+				result = res.content
+				text = self.prepare_text(result)
+				shots += self.count(text,search.word)
+			finally:
+				rpcs.append(rpc)
+		for r in rpcs:
+			r.wait()
 		return shots
 	
 	def count(self,text,word):
@@ -77,6 +88,7 @@ class Counter():
 				else:
 					check=False
 					pure_text.append(line)
+		pure_text = ''.join(pure_text).split(' ')
 		return pure_text
 
 class MainPage(Handler,Counter):

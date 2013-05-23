@@ -48,12 +48,12 @@ class Counter():
 		if not self.process_fetch(word):
 			task = Task(id=word, word=word)
 			task.put()
-		taskqueue.add(url='/result/{0}'.format(word)) #,params={'id': word} to wczesniej dzialalo a teraz nie dziala
+		taskqueue.add(url='/result/{0}'.format(word))
 		self.redirect('/result/{0}'.format(word))
 		
 
 	def count_word(self,search):
-		url = ['http://onet.pl/','http://interia.pl/','http://wp.pl/','http://redtube.com/','http://www.gazeta.pl/0,0.html',
+		url = ['http://onet.pl/','http://interia.pl/','http://wp.pl/','http://www.gazeta.pl/0,0.html',
 		'http://www.pudelek.pl/','http://www.kozaczek.pl/','http://www.plotek.pl/plotek/0,0.html','http://www.thetimes.co.uk/tto/news/','http://edition.cnn.com/']
 		rpcs = []
 		shots = 0
@@ -64,7 +64,7 @@ class Counter():
 				res = rpc.get_result()
 				result = res.content
 				text = self.prepare_text(result)
-				shots += self.count(text,search.word)
+				shots += self.count(text,search)
 			finally:
 				rpcs.append(rpc)
 		for r in rpcs:
@@ -112,7 +112,7 @@ class Result(Handler,Counter):
 
 	def post(self,id):
 		search = Task.get_by_id(id)
-		SUM = self.count_word(search)
+		SUM = self.count_word(search.word)
 		search.count = SUM
 		search.put()
 
@@ -120,7 +120,10 @@ class Result(Handler,Counter):
 class List(Handler,Counter):
 	
 	def get(self):
-		return
-
+		qry = Task.query()
+		for entity in qry.iter(keys_only=True):
+			k = str(entity).lstrip("Key('Task', '").rstrip("')")
+			update = self.count_word(k)
+			self.response.out.write('%s || %s<br />'% (k,update))
 
 app = webapp2.WSGIApplication([('/search',MainPage),('/result/([a-zA-Z0-9_]+)',Result),('/list',List)], debug=True)
